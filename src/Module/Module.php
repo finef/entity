@@ -9,7 +9,7 @@ class Module extends Container
 {
 
     protected $_app;
-    
+
     public function register($app)
     {
         $this->_app = $app;
@@ -22,8 +22,8 @@ class Module extends Container
     protected function _mod()
     {
         return $this->mod = new Container(array('__invoke' => array(
-            'app'    => '\Entity\Module\App',
-            'entity' => '\Entity\Module\Entity',
+            'app'    => '\Fine\Entity\Module\App',
+            'entity' => '\Fine\Entity\Module\Entity',
         )));
     }
 
