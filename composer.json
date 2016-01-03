@@ -8,9 +8,9 @@
         "fine/container": "*"
     },
     "autoload": {
-        "psr-4": {"Fine\\Worker\\": "src"}
+        "psr-4": {"Fine\\Entity\\": "src"}
     },
     "extra": {
-        "fine-module": {"name": "app", "class": "Fine\\App\\Module\\Module"}
+        "fine-module": {"name": "entity", "class": "Fine\\Entity\\Module\\Module"}
     }
 }
