@@ -11,11 +11,9 @@ class App
     public function db(ClientInterface $db)
     {
         $db(array(
-            'attr' => function () {
-                return new Table([
-                    'setTable'  => 'attr',
-                    'setFields' => ['attr_id_entity', 'attr_key', 'attr_val'],
-                ]);
+            'attr' => function () use ($db) {
+                return (new Table())->setDb($db)->setTable('attr')
+                        ->setFields(['attr_id_entity', 'attr_key', 'attr_val']);
             },
             'dispatch' => function () {
                 return new Table([

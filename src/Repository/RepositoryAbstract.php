@@ -8,28 +8,38 @@ namespace Entity\Repository;
 abstract class RepositoryAbstract
 {
 
-    protected $_subentity = array();
-
-    protected $_subentityListing = array();
-
-    /**
-     * Construct
-     *
-     * @param array $config
-     */
-    public function __construct(array $config = array())
+    protected $_name;
+    protected $_extensions = array();
+    
+    public function setName($name) 
     {
-        foreach ($config as $k => $v) {
-            $this->{$k}($v);
-        }
+        $this->_name = $name;
+        return $this;
     }
+
+    public function getName() 
+    {
+        return $this->_name;
+    }
+
+    public function setExtensions($extensions) 
+    {
+        $this->_extensions = $extensions;
+        return $this;
+    }
+
+    public function getExtensions() 
+    {
+        return $this->_extensions;
+    }
+
 
     public function fetcher(array $param = array())
     {
         $fetcher = app()->mod->app->db->entity;
 
         // subcontent
-        $this->_subentityCall('fetcher', array($fetcher, $param));
+        $this->_extend('fetcher', array($fetcher, $param));
 
         // concrete repository logic
         $this->_fetcher($fetcher, $param);
@@ -57,7 +67,7 @@ abstract class RepositoryAbstract
         // operation pre
         $operation = $this->_isOperation($param);
         if ($operation) {
-            $this->_subentityCall('operationFetchPre', $param);
+            $this->_extend('fetchPre', $param);
         }
 
         // fetch
@@ -65,11 +75,11 @@ abstract class RepositoryAbstract
         if (!$tuple) {
             return null;
         }
-        $entity = $this->tuple2entity($tuple);
+        $entity = $this->tuple2entity($param, $tuple);
 
         // operation post
         if ($operation) {
-            $this->_subentityCall('operationFetchPre', $param, $entity);
+            $this->_extend('fetchPost', $param, $entity);
         }
 
         return $entity;
@@ -108,7 +118,7 @@ abstract class RepositoryAbstract
             else if (array_key_exists('entity_origin', $entity)) {
                 $entityPre = $this->fetch(array('entity_origin' => $entity['entity_origin'], 'operation' => false));
             }
-            $this->_subentityCall('operationSavePre', array($entity, $entityPre));
+            $this->_extend('savePre', array($entity, $entityPre));
         }
 
         // save main record
@@ -119,7 +129,7 @@ abstract class RepositoryAbstract
         }
 
         // save subentities
-        $this->_subentityCall('save', array($entity));
+        $this->_extend('save', array($entity));
 
         // concrete repository logic
         $this->_save($entity);
@@ -127,7 +137,7 @@ abstract class RepositoryAbstract
         // operation post
         if ($operation) {
             $entityPost = $this->fetch(array('entity_id' => $entity['entity_id'], 'operation' => false));
-            $this->_subentityCall('operationSavePost', [$entity, $entityPre, $entityPost]);
+            $this->_extend('savePost', [$entity, $entityPre, $entityPost]);
         }
 
         return $entity['entity_id'];
@@ -135,7 +145,10 @@ abstract class RepositoryAbstract
 
     public function remove(array $entity)
     {
-        if (!array_key_exists('entity_id', $entity) || !array_key_exists('entity_origin', $entity)) {
+        if (
+            !array_key_exists('entity_id', $entity) || !array_key_exists('entity_origin', $entity)
+            || ctype_digit($entity['entity_id']) || is_string($entity['entity_origin'])
+        ) {
             throw new \LogicException();
         }
 
@@ -149,53 +162,36 @@ abstract class RepositoryAbstract
             else if (array_key_exists('entity_origin', $entity)) {
                 $entityPre = $this->fetch(array('entity_origin' => $entity['entity_origin'], 'operation' => false));
             }
-            $this->_subentityCall('operationRemovePre', array($entity, $entityPre));
+            $this->_extend('removePre', array($entity, $entityPre));
         }
 
         // remove main record
         $this->_removeEntity($entity);
 
         // remove subentities
-        $this->_subentityCall('remove', array($entity, $entityPre));
+        $this->_extend('remove', array($entity, $entityPre));
 
         // concrete repository logic
         $this->_remove($entity);
 
         // operation post
         if ($operation) {
-            $this->_subentityCall('operationRemovePost', [$entity, $entityPre]);
+            $this->_extend('operationRemovePost', [$entity, $entityPre]);
         }
     }
 
-    public function getSubentities()
+    public function tuple2entity(array $tuple, array $param)
     {
-        return $this->_subentity;
-    }
-
-    public function hasSubentity($subcontent)
-    {
-        return in_array($subcontent, $this->_subcontent);
-    }
-
-    public function tuple2entity(array $tuple)
-    {
-        // subentity
-        $this->_subentityCall('tuple2entity', array($tuple));
-
-        // concrete repository logic
-        $this->_tuple2entity($tuple);
+        $this->_extend('tuple2entity', array($tuple, $param));
+        $this->_tuple2entity($tuple, $param);
 
         return $tuple;
     }
 
-    public function tuples2entities(array $tuples)
+    public function tuples2entities(array $tuples, array $param)
     {
-        // subentity
-        $this->_subentityCall('tuples2entities', array($tuples));
-
-        // concrete repository logic
-        $this->_tuple2entity($tuples);
-
+        $this->_extend('tuples2entities', array($tuples, $param));
+        $this->_tuples2entities($tuples, $param);
         return $tuples;
     }
 
@@ -203,11 +199,11 @@ abstract class RepositoryAbstract
     {
 
         // detach group and order
-        if (($group = $content->getParam('group'))) {
-            $fetcher->removeParam('group');
+        if (($group = $content->getParam(':group'))) {
+            $fetcher->removeParam(':group');
         }
-        if (($order = $content->getParam('order'))) {
-            $fetcher->removeParam('order');
+        if (($order = $content->getParam(':order'))) {
+            $fetcher->removeParam(':order');
         }
 
         // paginate
@@ -217,14 +213,14 @@ abstract class RepositoryAbstract
 
         // attach group and order
         if ($group) {
-            $fetcher->setParam('group', $group);
+            $fetcher->setParam(':group', $group);
         }
         if ($order) {
-            $fetcher->setParam('groorderup', $order);
+            $fetcher->setParam(':order', $order);
         }
 
         // set paging
-        $fetcher->setParam('paging', $paging);
+        $fetcher->setParam(':paging', $paging);
 
     }
 
@@ -419,7 +415,7 @@ abstract class RepositoryAbstract
         return $operation;
     }
 
-    protected function _subentityCall($method, $args)
+    protected function _extend($method, $args)
     {
         foreach ($this->_subentity as $subentity) {
             if (!method_exists($subentity, $method)) {

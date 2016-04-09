@@ -9,17 +9,30 @@ class RepositoryContainer extends RepositoryAbstract implements RepositoryInterf
 
     use ContainerTrait;
 
-    // public function save(array $entity)
-    // {
-    //     if (!isset($entity['entity_type'])) {
-    //         throw new \LogicException();
-    //     }
-    //
-    //     if (!isset($this->{$entity['entity_type']})) {
-    //         throw new \LogicException();
-    //     }
-    //
-    //     return parent::save($entity);
-    // }
+    protected $_db;
+    
+    public function setDb($db) 
+    {
+        $this->_db = $db;
+        return $this;
+    }
+
+    public function getDb() 
+    {
+        return $this->_db;
+    }
+
+    public function save(array $entity)
+    {
+        if (!isset($entity['entity_type'])) {
+            throw new \LogicException();
+        }
+
+        if (!isset($this->{$entity['entity_type']})) {
+            throw new \LogicException();
+        }
+
+        /** @TODO*/
+    }
 
 }
