@@ -24,15 +24,15 @@ class RepositoryContainer extends RepositoryAbstract implements RepositoryInterf
 
     public function save(array $entity)
     {
-        if (!isset($entity['entity_type'])) {
+        if (!isset($entity['entity_type']) || !isset($this->{$entity['entity_type']})) {
             throw new \LogicException();
         }
 
         if (!isset($this->{$entity['entity_type']})) {
             throw new \LogicException();
         }
-
-        /** @TODO*/
+        
+        return $this->$type->save($entity['entity_type']);
     }
 
 }

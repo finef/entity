@@ -30,15 +30,16 @@ class Module extends Container
     protected function _repository()
     {
         $this->repository = new \Entity\Repository\RepositoryContainer();
+        $this->reposiotry->setExtensionContainer($this->extension);
         $this->_app->mod->each()->entity->repository($this->repository);
         return $this->repository;
     }
 
-    protected function _subentity()
+    protected function _extension()
     {
-        $this->subentity = new \Fine\Container\Container();
-        $this->_app->mod->each()->entity->subentity($this->subentity);
-        return $this->subentity;
+        $this->extension = new \Fine\Container\Container();
+        $this->_app->mod->each()->entity->extension($this->subentity);
+        return $this->extension;
     }
 
 }

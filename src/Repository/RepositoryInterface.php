@@ -4,6 +4,10 @@ namespace \Entity\Repository;
 
 interface RepositoryInterface
 {
+    
+    public function setName($name);
+
+    public function getName();
 
     public function fetcher(array $param = array());
     
