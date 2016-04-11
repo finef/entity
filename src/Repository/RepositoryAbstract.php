@@ -4,9 +4,13 @@
 
 namespace Entity\Repository;
 
-use \Fine\Entity\Extension\OperationInterface;
+use \Fine\Entity\Extension\NeedsRepositoryInterface;
+use \Fine\Entity\Extension\ModelEntityRemoveInterface;
+use \Fine\Entity\Extension\ModelEntitySaveInterface;
+use \Fine\Entity\Extension\OperationFetchInterface;
+use \Fine\Entity\Extension\OperationSaveInterface;
+use \Fine\Entity\Extension\OperationRemoveInterface;
 use \Fine\Entity\Extension\SubentityInterface;
-use \Fine\Entity\Extension\EntitySaveInterface;
 
 abstract class RepositoryAbstract
 {
@@ -26,15 +30,38 @@ abstract class RepositoryAbstract
         return $this->_type;
     }
     
+    public function addExtension($extension)
+    {
+        if ($extension instanceof NeedsRepositoryInterface) {
+            $extension->setRepository($this);
+        }
+        return $this;
+    }
+    
+    public function addExtensions(array $extensions)
+    {
+        foreach ($extensions as $extensions) {
+            $this->addExtension($extension);
+        }
+        return $this;
+    }
+    
     public function setExtensions($extensions) 
     {
-        $this->_extensions = $extensions;
+        $this->removeExtensions();
+        $this->addExtensions($extensions);
         return $this;
     }
 
     public function getExtensions() 
     {
         return $this->_extensions;
+    }
+    
+    public function removeExtensions()
+    {
+        $this->_extensions = [];
+        return $this;
     }
 
     public function setRepositoryContainer($repositoryContainer) 
@@ -75,7 +102,7 @@ abstract class RepositoryAbstract
         // operation pre
         $operation = $this->_isOperation($param);
         if ($operation) {
-            $this->_extension(OperationInterface, 'fetchPre', [$param, $context]);
+            $this->_extension(OperationFetchInterface, 'fetchPre', [$param, $context]);
         }
 
         // fetch
@@ -87,7 +114,7 @@ abstract class RepositoryAbstract
 
         // operation post
         if ($operation) {
-            $this->_extension(OperationInterface, 'fetchPost', [$entity, $context]);
+            $this->_extension(OperationFetchInterface, 'fetchPost', [$entity, $context]);
         }
 
         return $entity;
@@ -130,13 +157,11 @@ abstract class RepositoryAbstract
             else if (array_key_exists('entity_origin', $entity)) {
                 $entityPre = $this->fetch(['entity_origin' => $entity['entity_origin'], 'operation' => true]);
             }
-            $this->_extension(OperationInterface, 'savePre', [$entity, $entityPre, $context]);
+            $this->_extension(OperationSaveInterface, 'savePre', [$entity, $entityPre, $context]);
         }
 
         // save main record
-        $this->_saveEntity($entity);
-
-        if (!$entity['entity_id']) {
+        if (!$this->_saveEntity($entity)) {
             return false;
         }
 
@@ -149,7 +174,7 @@ abstract class RepositoryAbstract
         // operation post
         if ($operation) {
             $entityPost = $this->fetch(['entity_id' => $entity['entity_id'], 'operation' => true]);
-            $this->_extension(OperationInterface, 'savePost', [$entity, $entityPre, $entityPost, $context]);
+            $this->_extension(OperationSaveInterface, 'savePost', [$entity, $entityPre, $entityPost, $context]);
         }
 
         return $entity['entity_id'];
@@ -176,11 +201,13 @@ abstract class RepositoryAbstract
             else if (array_key_exists('entity_origin', $entity)) {
                 $entityPre = $this->fetch(['entity_origin' => $entity['entity_origin'], 'operation' => true]);
             }
-            $this->_extension(OperationInterface, 'removePre', [$entity, $entityPre, $context]);
+            $this->_extension(OperationRemoveInterface, 'removePre', [$entity, $entityPre, $context]);
         }
 
         // remove main record
-        $this->_removeEntity($entity);
+        if (!$this->_removeEntity($entity)) {
+            return false;
+        }
 
         // remove subentities
         $this->_extension(SubentityInterface, 'remove', [$entity, $entityPre]);
@@ -190,7 +217,7 @@ abstract class RepositoryAbstract
 
         // operation post
         if ($operation) {
-            $this->_extension(OperationInterface, 'removePost', [$entity, $entityPre, $context]);
+            $this->_extension(OperationRemoveInterface, 'removePost', [$entity, $entityPre, $context]);
         }
     }
 
@@ -203,7 +230,7 @@ abstract class RepositoryAbstract
 
     public function tuples2entities(array $tuples, array $context)
     {
-        $this->_extension(SubentityInterface, 'tuples2entities', array($tuples, $context));
+        $this->_extension(SubentityInterface, 'tuples2entities', [$tuples, $context]);
         $this->_tuples2entities($tuples, $context);
         return $tuples;
     }
@@ -237,6 +264,7 @@ abstract class RepositoryAbstract
 
     protected function _saveEntity(array &$entity)
     {
+        $context = $entity;
         $model = $this->getRepositoryContainer()->getDb()->entity;
 
         if (array_key_exists('entity_id', $entity)) { // select by entity_id
@@ -254,98 +282,60 @@ abstract class RepositoryAbstract
             }
         }
         
-        $this->_extension(EntitySaveInterface, 'savePre', [$entity, $model]);
-
-        // relation ref & count
-        if (isset($entity['contentRelation'])) {
-
-            foreach ($this->_relationRef as $ref) { // relation ref
-
-                if (isset($entity['contentRelation'][$ref])) {
-                    reset($entity['contentRelation'][$ref]);
-                    $rel = current($entity['contentRelation'][$ref]);
-                    if (is_array($rel) && isset($rel['entity_id'])) {
-                        $model->{"entity_id_entity_{$ref}"} = $rel['entity_id'];
-                    }
-                    else if (is_array($rel) && isset($rel['entity_origin'])) {
-                        $model->{"entity_id_entity_{$ref}"} = m_content::_()->field('entity_id')->fetchVal(array('entity_origin' => $rel['entity_origin']));
-                    }
-                    else if (ctype_digit($rel)) {
-                        $model->{"entity_id_entity_{$ref}"} = $rel;
-                    }
-                    else if (is_string($rel)) {
-                        $model->{"entity_id_entity_{$ref}"} = m_content::_()->field('entity_id')->fetchVal(array('entity_origin' => $rel));
-                    }
-                    else {
-                        $model->{"entity_id_entity_{$ref}"} = '0';
-                    }
-                }
-            }
-
-            foreach ($this->_relationCount as $ref) { // relation count
-                $model->{"entity_count_entity_{$ref}"} = 0;
-
-                if (isset($entity['contentRelation'][$ref])) {
-                    $model->{"entity_count_entity_{$ref}"} = count($entity['contentRelation'][$ref]);
-                }
-            }
-        }
+        $this->_extension(ModelEntitySaveInterface, 'savePre', [$entity, $model, $context]);
 
         if (!$model->getId()) { // insert
-
-            $model->entity_type   = $this->module()->getType();
-            $model->entity_insert = $model->entity_update;
-
-
-
+            $model->entity_type = $this->module()->getType();
             $model->save();
             $model->selectInserted();
-
             $entity['entity_id'] = $model->getId();
-            $entity['_new']       = true;
         }
         else { // update
-
             $model->save();
         }
+        
+        $this->_extension(ModelEntitySaveInterface, 'savePost', [$entity, $model, $context]);
+        
+        return true;
     }
 
-    protected function _removeContent(array &$entity)
+    protected function _removeEntity(array &$entity)
     {
-        $content = new m_content();
+        $context = $entity;
+        $model = $this->getRepositoryContainer()->getDb()->entity;
 
-        if (isset($entity['entity_id'])) { // select by entity_id
-            $content->select($entity['entity_id']);
+        if (array_key_exists('entity_id', $entity)) { // select by entity_id
+            $model->select($entity['entity_id']);
         }
-        else if (isset($entity['entity_origin'])) { // select by entity_origin
-            $content->select(array('entity_origin' => $entity['entity_origin']));
+        else if (array_key_exists('entity_origin', $entity)) { // select by entity_origin
+            $model->select(array('entity_origin' => $entity['entity_origin']));
         }
 
-        if (!$content->getId()) {
+        if (!$model->getId()) {
             return false;
         }
 
-        if (strlen($content->entity_origin)) {
-            m_contentOriginBan::_()->insert(array('contentOriginBan_origin' => $content->entity_origin, 'contentOriginBan_insert' => time()));
-        }
+        $this->_extension(ModelEntityRemoveInterface, 'removePre', [$entity, $model, $context]);
 
-        $content->delete();
+        $model->delete();
+        
+        $this->_extension(ModelEntityRemoveInterface, 'removePost', [$entity, $model, $context]);
+        
+        return true;
     }
 
     protected function _save(array &$entity)
     {
-        $model = app()->mod->app->db->{$this->_type};
-        $model->select($entity['entity_id']);
-        $model->setVal($entity);
+        $model = $this->getRepositoryContainer()->getDb()->{$this->_type}->select($entity['entity_id'])->setVal($entity);
 
         $model->getId()
             ? $model->save()
-            : $model->insert(array("{$this->_type}_id" => $entity['entity_id']) + $model->val());
+            : $model->insert(["{$this->_type}_id" => $entity['entity_id']] + $model->val());
     }
 
     protected function _remove(array &$entity)
     {
-        app()->mod->app->db->{$this->_type}->delete($entity['entity_id']);
+        $model = $this->getRepositoryContainer()->getDb()->{$this->_type}->delete(["{$this->_type}_id" => $entity['entity_id']] );
     }
 
     protected function _fetcher(Model $fetcher, &$param)

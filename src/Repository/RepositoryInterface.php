@@ -1,10 +1,14 @@
 <?php
 
-namespace \Entity\Repository;
+namespace \Fine\Entity\Repository;
 
 interface RepositoryInterface
 {
     
+    public function setRepositoryContainer($container);
+
+    public function getRepositoryContainer();
+
     public function setName($name);
 
     public function getName();
